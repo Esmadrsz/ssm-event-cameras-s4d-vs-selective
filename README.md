@@ -57,38 +57,42 @@ layer type.
 
 ## Results
 
-All numbers below are real output from `train.py`, not illustrative.
+All numbers below are real output from `train.py` / averaged over 5
+random seeds, not illustrative.
 
 **Correctness (verified in `tests/`):** `S4DLayer`'s FFT-convolution
 forward pass was checked against a brute-force sequential recurrence
-computing the exact same system. Max absolute difference: **1.2 × 10⁻⁷**
+computing the exact same system. Max absolute difference: **3.6 × 10⁻⁷**
 — floating-point precision, i.e. the two computation paths are
 mathematically identical, as they must be for an LTI system.
 
 **Bandlimiting / frequency-generalization test** (trained at `freq=1.0`,
-evaluated at other frequencies — directly testing the Zubic et al. claim):
+evaluated at other frequencies — directly testing the Zubic et al. claim.
+Averaged over 5 seeds; single-seed runs vary by roughly ±30% but the
+ranking below was stable across all 5):
 
-| Frequency | S4D MSE | Selective MSE |
+| Frequency | S4D MSE (avg) | Selective MSE (avg) |
 |---:|---:|---:|
-| 0.5× | 0.179 | **0.010** |
-| 1.0× (training freq) | 0.001 | 0.003 |
-| 2.0× | 0.391 | **0.025** |
-| 4.0× | 0.387 | **0.064** |
+| 0.5× | **0.0098** | 0.0126 |
+| 1.0× (training freq) | **0.0025** | 0.0035 |
+| 2.0× | **0.0202** | 0.0356 |
+| 4.0× | 0.1940 | **0.1477** |
 
-**Finding:** at the training frequency, both models denoise well and S4D
-is slightly better. But move *away* from that frequency, and S4D's error
-increases roughly 300-400x, while the Selective model's error grows much
-more gracefully (roughly 6-25x). This is the opposite of what the "LTI
-systems generalize across frequencies for free" argument might naively
-suggest — in this setup, the *input-dependent* selective mechanism
-generalizes better than the fixed-timescale LTI model. My reading: a
-fixed learned `dt` optimizes for one specific frequency and doesn't
-automatically adapt when the input frequency shifts, whereas the
-selective mechanism recomputes its effective timescale from the input at
-every step, giving it an implicit way to adjust. This is a real, measured
-result from this specific toy task — not a general claim about S4D vs.
-Mamba, and it's exactly the kind of result I'd want to discuss and
-stress-test further in a research conversation.
+**Finding:** across 5 seeds, S4D is consistently *better* than the
+selective model at moderate frequency shifts (0.5× and 2×) as well as at
+the training frequency — closer to what the "LTI systems transfer across
+frequencies via `dt` rescaling" argument would predict. The two models
+only swap places at the most extreme shift tested (4×), where the
+selective model's error grows more slowly than S4D's. So the honest
+summary is narrower than "selective always generalizes better": S4D's
+advantage holds over a 4x range around the training frequency, and only
+breaks down at the far edge of what was tested here. This is a real,
+measured result from this specific toy task with a specific set of
+hyperparameters (`state_dim`, `d_model`, `n_layers` differ between the
+two models here) — not a general claim about S4D vs. Mamba — and it's
+exactly the kind of result, and the kind of "well, it depends on the
+shift magnitude" nuance, I'd want to discuss and stress-test further in
+a research conversation.
 
 ## Tech Stack
 
@@ -131,10 +135,13 @@ pytest tests/ -v          # equivalence + sanity tests
 - Move from the synthetic sine-wave signal to a real event-camera dataset
   (DVS-Gesture, N-MNIST) or, ideally, real event data relevant to the
   aerospace domain.
-- Investigate *why* the fixed-timescale S4D generalizes worse across
-  frequency than the selective model here — does explicitly rescaling
-  `dt` at test time (as in the LTI-frequency-transfer argument) close
-  the gap, or does the gap persist even then?
+- Investigate *why* S4D's advantage flips at the most extreme frequency
+  shift (4×) tested here — does explicitly rescaling `dt` at test time
+  (as in the LTI-frequency-transfer argument) push that crossover point
+  further out, or is there a structural reason the selective model
+  should eventually win at large enough shifts?
+- Run more seeds and a finer grid of test frequencies to pin down where
+  exactly the crossover between the two models happens.
 
 ## References
 
